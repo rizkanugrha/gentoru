@@ -19,6 +19,6 @@
     "dependencies": {
         "mongodb": "^6.21.0",
         "pino": "^8.21.0",
-        "baileys": "github:Whiskeysockets/Baileys"
+        "baileys": "7.0.0-rc.9"
     }
 }

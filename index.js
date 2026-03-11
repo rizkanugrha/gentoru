@@ -1,20 +1,27 @@
 import makeWASocket, {
   useMultiFileAuthState,
-  DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   Browsers,
   jidNormalizedUser
 } from 'baileys';
 import pino from 'pino';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, watch } from 'fs';
+import { existsSync, mkdirSync, watch } from 'fs';
 import { join, relative } from 'path';
-import { createInterface } from 'readline';
 import { pathToFileURL } from 'url';
 import config from './config.js';
 import db from './lib/database.js';
-import commandHandler from './lib/command.js';
+import { commandHandler } from './lib/helper/command.js';
 import schema from './lib/db/schema.js';
+
+// Mengimpor utility functions yang telah dipisah
+import {
+  formatLog,
+  formatContactLog,
+  getBotNumber,
+  hasSession,
+  parsePhoneNumber
+} from './lib/helper/utils.js';
 
 const logger = pino({
   level: 'error',
@@ -45,193 +52,6 @@ const activeTimers = new Set();
 const MAX_PENDING_MESSAGES = 200;
 const PENDING_MESSAGE_TTL = 3 * 60 * 1000;
 
-function formatPhoneNumber(number) {
-  let formatted = number.trim().replace(/[^0-9]/g, '');
-  if (formatted.startsWith('0')) {
-    formatted = '62' + formatted.substring(1);
-  } else if (!formatted.startsWith('62')) {
-    formatted = '62' + formatted;
-  }
-  return formatted;
-}
-
-function getMessageType(message) {
-  if (message?.conversation) return 'text';
-  if (message?.extendedTextMessage) return 'text';
-  if (message?.imageMessage) return 'image';
-  if (message?.videoMessage) return 'video';
-  if (message?.audioMessage) return 'audio';
-  if (message?.documentMessage) return 'document';
-  if (message?.stickerMessage) return 'sticker';
-  if (message?.locationMessage) return 'location';
-  if (message?.contactMessage) return 'contact';
-  if (message?.buttonsResponseMessage) return 'button';
-  if (message?.listResponseMessage) return 'list';
-  if (message?.templateButtonReplyMessage) return 'template';
-  if (message?.reactionMessage) return 'reaction';
-  if (message?.protocolMessage) return 'protocol';
-  return 'unknown';
-}
-
-function getMessageText(message) {
-  return (
-    message?.conversation ||
-    message?.extendedTextMessage?.text ||
-    message?.imageMessage?.caption ||
-    message?.videoMessage?.caption ||
-    message?.documentMessage?.caption ||
-    message?.audioMessage?.caption ||
-    message?.stickerMessage?.caption ||
-    message?.locationMessage?.caption ||
-    message?.contactMessage?.displayName ||
-    message?.buttonsResponseMessage?.selectedButtonId ||
-    message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-    message?.templateButtonReplyMessage?.selectedId ||
-    ''
-  );
-}
-
-function formatLog(msg, pushName) {
-  const isLid = msg?.key?.addressingMode === 'lid';
-  const remoteJid = isLid
-    ? (msg?.key?.remoteJidAlt || msg?.remoteJidAlt || msg?.key?.remoteJid)
-    : msg?.key?.remoteJid;
-  const isGroup = remoteJid && remoteJid.endsWith('@g.us');
-  const participant = isGroup
-    ? (isLid
-      ? (msg?.key?.participantAlt || msg?.participantAlt || msg?.key?.participant || msg?.participant)
-      : (msg?.key?.participant || msg?.participant))
-    : null;
-  const sender = isGroup
-    ? (participant ? participant.split('@')[0] : (remoteJid ? remoteJid.split('@')[0] : ''))
-    : (remoteJid ? remoteJid.split('@')[0] : '');
-
-  const messageType = getMessageType(msg?.message);
-  const text = getMessageText(msg?.message);
-  const timestamp = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  const typeIcons = {
-    text: '💬',
-    image: '🖼️',
-    video: '🎥',
-    audio: '🎵',
-    document: '📄',
-    sticker: '🎨',
-    location: '📍',
-    contact: '👤',
-    button: '🔘',
-    list: '📋',
-    template: '📝',
-    reaction: '👍',
-    protocol: '⚙️',
-    unknown: '❓'
-  };
-
-  const icon = typeIcons[messageType] || '❓';
-  const typeLabel = messageType.toUpperCase();
-
-  const jidToGet = isGroup && participant ? participant : remoteJid;
-  let name = pushName;
-
-  if (!name || /^\+?\d+[\s\-]?\d+[\s\-]?\d+[\s\-]?\d+$/.test(name) || /^\d+$/.test(name)) {
-    if (sock && sock.getName) {
-      const getNameResult = sock.getName(jidToGet);
-      if (getNameResult && getNameResult !== 'none' && getNameResult !== 'Group') {
-        name = getNameResult;
-        if (/^\+?\d+[\s\-]?\d+[\s\-]?\d+[\s\-]?\d+$/.test(name) || /^\d+$/.test(name)) {
-          name = sender;
-        }
-      } else {
-        name = sender;
-      }
-    } else {
-      name = sender;
-    }
-  }
-
-  const groupInfo = isGroup ? 'GROUP' : 'PRIVATE';
-
-  const terminalWidth = process.stdout.columns || 80;
-  const maxWidth = Math.min(terminalWidth - 2, 100);
-
-  const header = `${icon} ${typeLabel} [${groupInfo}] ${timestamp}`;
-  const fromLine = `From: ${name} (${sender})`;
-  let logLines = [fromLine];
-
-  if (isGroup) {
-    logLines.push(`Group: ${remoteJid.split('@')[0]}`);
-  }
-
-  if (text && text.trim()) {
-    const displayText = text.replace(/\n/g, ' ');
-    const maxTextLength = maxWidth - 8;
-    const truncatedText = displayText.length > maxTextLength
-      ? displayText.substring(0, maxTextLength - 3) + '...'
-      : displayText;
-    logLines.push(`Text: ${truncatedText}`);
-  }
-
-  const border = '─'.repeat(maxWidth);
-
-  let logOutput = `\n╭─ ${header} ─${'─'.repeat(Math.max(0, maxWidth - header.length - 4))}╮\n`;
-  logLines.forEach(line => {
-    const truncatedLine = line.length > maxWidth - 4
-      ? line.substring(0, maxWidth - 7) + '...'
-      : line;
-    logOutput += `│ ${truncatedLine.padEnd(maxWidth - 4)} │\n`;
-  });
-  logOutput += `╰${border}╯`;
-
-  return logOutput;
-}
-
-function getBotNumber() {
-  return new Promise((resolve) => {
-    const noJsonPath = './no.json';
-
-    if (existsSync(noJsonPath)) {
-      try {
-        const data = JSON.parse(readFileSync(noJsonPath, 'utf-8'));
-        if (data.number) {
-          const formatted = formatPhoneNumber(data.number);
-          if (formatted !== data.number) {
-            writeFileSync(noJsonPath, JSON.stringify({ number: formatted }, null, 2));
-            log.info(`Updated bot number format: ${formatted}`);
-          }
-          log.info(`Using saved bot number: ${formatted}`);
-          resolve(formatted);
-          return;
-        }
-      } catch (error) {
-        log.error('Error reading no.json:', error.message);
-      }
-    }
-
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
-    rl.question('Masukkan nomor bot (contoh: 6281234567890 atau 085123456789): ', (answer) => {
-      const number = formatPhoneNumber(answer);
-      if (number && number.length >= 10) {
-        writeFileSync(noJsonPath, JSON.stringify({ number }, null, 2));
-        log.success(`Bot number saved: ${number}`);
-        resolve(number);
-      } else {
-        log.error('Nomor tidak valid!');
-        process.exit(1);
-      }
-      rl.close();
-    });
-  });
-}
-
-function hasSession() {
-  const credsPath = `${config.bot.sessionPath}/creds.json`;
-  return existsSync(credsPath);
-}
-
 async function startBot() {
   if (isReconnecting) {
     return;
@@ -243,8 +63,7 @@ async function startBot() {
       try {
         sock.ev.removeAllListeners();
         await sock.end();
-      } catch (e) {
-      }
+      } catch (e) { }
       sock = null;
     }
 
@@ -260,7 +79,7 @@ async function startBot() {
     await db.connect();
 
     if (!botNumber) {
-      botNumber = await getBotNumber();
+      botNumber = await getBotNumber(log);
     }
 
     if (!commandsLoaded) {
@@ -269,7 +88,7 @@ async function startBot() {
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(config.bot.sessionPath);
-    const sessionExists = hasSession() && state.creds?.registered;
+    const sessionExists = hasSession(config.bot.sessionPath) && state.creds?.registered;
 
     const { version } = await fetchLatestBaileysVersion();
     const versionStr = Array.isArray(version) ? version.join('.') : version;
@@ -368,124 +187,41 @@ async function startBot() {
         switch (statusCode) {
           case 408:
             log.error('Connection timed out. Restarting...');
-            isReconnecting = true;
-            const timer1 = setTimeout(() => {
-              activeTimers.delete(timer1);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer1);
+            reconnectBot(3000);
             break;
           case 503:
             log.error('Unavailable service. Restarting...');
-            isReconnecting = true;
-            const timer2 = setTimeout(() => {
-              activeTimers.delete(timer2);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer2);
+            reconnectBot(3000);
             break;
           case 428:
             log.info('Connection closed. Restarting...');
-            isReconnecting = true;
-            const timer3 = setTimeout(() => {
-              activeTimers.delete(timer3);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer3);
+            reconnectBot(3000);
             break;
           case 515:
             log.info('Need to restart. Restarting...');
-            isReconnecting = true;
-            const timer4 = setTimeout(() => {
-              activeTimers.delete(timer4);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer4);
+            reconnectBot(3000);
             break;
           case 401:
             log.info('Session logged out. Recreating session...');
-            try {
-              const { rmSync, mkdirSync } = await import('fs');
-              rmSync(config.bot.sessionPath, { recursive: true, force: true });
-              mkdirSync(config.bot.sessionPath, { recursive: true });
-              log.success('Session removed!');
-            } catch (e) {
-              log.info('Session not found!');
-            }
-            isReconnecting = true;
-            const timer5 = setTimeout(() => {
-              activeTimers.delete(timer5);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer5);
+            clearSessionAndRestart(3000);
             break;
           case 403:
           case 500:
             log.error('Your WhatsApp has been banned');
-            try {
-              const { rmSync, mkdirSync } = await import('fs');
-              rmSync(config.bot.sessionPath, { recursive: true, force: true });
-              mkdirSync(config.bot.sessionPath, { recursive: true });
-            } catch (e) { }
-            isReconnecting = true;
-            const timer6 = setTimeout(() => {
-              activeTimers.delete(timer6);
-              isReconnecting = false;
-              startBot();
-            }, 60000);
-            activeTimers.add(timer6);
+            clearSessionAndRestart(60000);
             break;
           case 405:
             log.info('Session not logged in. Recreating session...');
-            try {
-              const { rmSync, mkdirSync } = await import('fs');
-              rmSync(config.bot.sessionPath, { recursive: true, force: true });
-              mkdirSync(config.bot.sessionPath, { recursive: true });
-              log.success('Session removed!');
-            } catch (e) {
-              log.info('Session not found!');
-            }
-            isReconnecting = true;
-            const timer7 = setTimeout(() => {
-              activeTimers.delete(timer7);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer7);
+            clearSessionAndRestart(3000);
             break;
           default:
             log.info(`Connection closed (${statusCode || 'unknown'}). Restarting...`);
-            isReconnecting = true;
-            const timer8 = setTimeout(() => {
-              activeTimers.delete(timer8);
-              isReconnecting = false;
-              startBot();
-            }, 3000);
-            activeTimers.add(timer8);
+            reconnectBot(3000);
         }
       }
     });
 
     sock.ev.on('creds.update', saveCreds);
-
-    function parsePhoneNumber(number) {
-      let cleaned = ('' + number).replace(/\D/g, '');
-      if (cleaned?.startsWith('62')) {
-        if (cleaned.length >= 11 && cleaned.length <= 13) {
-          return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 6)} ${cleaned.slice(6, 10)} ${cleaned.slice(10)}`;
-        } else if (cleaned.length === 10) {
-          return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 6)} ${cleaned.slice(6)}`;
-        } else if (cleaned.length === 9) {
-          return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5)}`;
-        }
-      }
-      return '+' + cleaned;
-    }
 
     sock.getName = (jid) => {
       let id = jidNormalizedUser(jid);
@@ -524,40 +260,9 @@ async function startBot() {
       }
     });
 
-    function formatContactLog(contact, eventType) {
-      const timestamp = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const terminalWidth = process.stdout.columns || 80;
-      const maxWidth = Math.min(terminalWidth - 2, 100);
-
-      const id = jidNormalizedUser(contact.id);
-      const name = contact.name || contact.verifiedName || contact.notify || sock.getName(id) || id.split('@')[0];
-      const phone = id.split('@')[0];
-
-      const header = `👤 CONTACT [${eventType.toUpperCase()}] ${timestamp}`;
-      const nameLine = `Name: ${name}`;
-      const phoneLine = `Phone: ${phone}`;
-      let logLines = [nameLine, phoneLine];
-
-      if (contact.notify) {
-        logLines.push(`Notify: ${contact.notify}`);
-      }
-
-      const border = '─'.repeat(maxWidth);
-      let logOutput = `\n╭─ ${header} ─${'─'.repeat(Math.max(0, maxWidth - header.length - 4))}╮\n`;
-      logLines.forEach(line => {
-        const truncatedLine = line.length > maxWidth - 4
-          ? line.substring(0, maxWidth - 7) + '...'
-          : line;
-        logOutput += `│ ${truncatedLine.padEnd(maxWidth - 4)} │\n`;
-      });
-      logOutput += `╰${border}╯`;
-
-      return logOutput;
-    }
-
     sock.ev.on('contacts.update', async (update) => {
       for (const contact of update) {
-        console.log(formatContactLog(contact, 'update'));
+        console.log(formatContactLog(contact, 'update', sock));
         const id = jidNormalizedUser(contact.id);
         if (db) {
           const existing = db.get('contacts', id, {});
@@ -571,7 +276,7 @@ async function startBot() {
 
     sock.ev.on('contacts.upsert', async (update) => {
       for (const contact of update) {
-        console.log(formatContactLog(contact, 'upsert'));
+        console.log(formatContactLog(contact, 'upsert', sock));
         const id = jidNormalizedUser(contact.id);
         if (db) {
           db.set('contacts', id, {
@@ -589,17 +294,33 @@ async function startBot() {
     log.error('Error starting bot: ' + error.message);
     if (!isWaitingForPairing) {
       log.info('Auto restarting in 5 seconds...');
-      isReconnecting = true;
-      const timer = setTimeout(() => {
-        activeTimers.delete(timer);
-        isReconnecting = false;
-        startBot();
-      }, 5000);
-      activeTimers.add(timer);
+      reconnectBot(5000);
     } else {
       log.info('Error occurred while waiting for pairing. Bot will continue waiting...');
     }
   }
+}
+
+function reconnectBot(timeout) {
+  isReconnecting = true;
+  const timer = setTimeout(() => {
+    activeTimers.delete(timer);
+    isReconnecting = false;
+    startBot();
+  }, timeout);
+  activeTimers.add(timer);
+}
+
+async function clearSessionAndRestart(timeout) {
+  try {
+    const { rmSync, mkdirSync } = await import('fs');
+    rmSync(config.bot.sessionPath, { recursive: true, force: true });
+    mkdirSync(config.bot.sessionPath, { recursive: true });
+    log.success('Session removed!');
+  } catch (e) {
+    log.info('Session not found!');
+  }
+  reconnectBot(timeout);
 }
 
 async function loadCommands() {
@@ -663,7 +384,7 @@ function setupHotReload() {
 async function handleIncomingMessage(msg) {
   try {
     const pushName = msg.pushName || '';
-    console.log(formatLog(msg, pushName));
+    console.log(formatLog(msg, pushName, sock));
     const tch = commandHandler.serializeTch(msg, false, sock, db);
     if (tch && !msg.key?.fromMe) {
       await schema.schema(tch, sock, db);
