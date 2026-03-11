@@ -1,0 +1,91 @@
+export default function(techwiz) {
+  techwiz.on({
+    cmd: ['*'],
+    desc: 'All response handler',
+    noPrefix: true
+  }, async (tch) => {
+    const dbusr = tch.db.get('users', tch.sender, {});
+    const dbgc = tch.db.get('groups', tch.from, {});
+    const dbset = tch.db.get('setting', 'setting', {});
+
+    if (!tch.isGroup) return;
+
+    if (dbgc.tagsw && !tch.isAdmin && tch.msg?.groupStatusMentionMessage) {
+      await tch.sendMessage({
+        text: `*TAG STORY DETECTED*
+
+Anda akan dikeluarkan karena di grup ini dilarang melakukan tag group pada story anda!!`
+      }, { quoted: tch.msg });
+      
+      try {
+        await tch.sock.groupParticipantsUpdate(tch.from, [tch.sender], 'remove');
+      } catch (error) {
+        console.error('Error removing participant:', error);
+      }
+    }
+
+    const linkRegex = /chat[.,#]whatsapp[.,#]com\/(?:invite\/)?([0-9A-Za-z]{20,24})/i;
+    const channelLinkRegex = /whatsapp[.,#]com\/channel\/([0-9A-Za-z]{20,24})/i;
+
+    if (dbgc?.antiLink) {
+      const isLink = linkRegex.exec(tch.body);
+      const linkch = channelLinkRegex.exec(tch.body);
+
+      if ((isLink || linkch) && !tch.fromMe && !tch.isAdmin) {
+        try {
+          const linkThisGroup = `https://chat.whatsapp.com/${await tch.sock.groupInviteCode(tch.from)}`;
+          if (tch.body.includes(linkThisGroup)) return;
+          
+          dbusr.warn = (dbusr.warn || 0) + 1;
+          tch.db.set('users', tch.sender, dbusr);
+          
+          console.log('[ + ] Anti Link System');
+          
+          if (dbusr.warn === 3) {
+            dbusr.warn = 0;
+            tch.db.set('users', tch.sender, dbusr);
+            
+            try {
+              await tch.sock.sendMessage(tch.from, { delete: tch.key });
+            } catch (e) {}
+            
+            await tch.sendMessage({
+              text: `*@${tch.sender.split("@")[0]}* anda terdeteksi mengirim link yang dilarang, anda akan dikeluarkan, karena telah mencapai batas maksimum warn!!`,
+              mentions: [tch.sender]
+            });
+            
+            try {
+              await tch.sock.groupParticipantsUpdate(tch.from, [tch.sender], 'remove');
+            } catch (error) {
+              console.error('Error removing participant:', error);
+            }
+            return;
+          }
+          
+          try {
+            await tch.sock.sendMessage(tch.from, { delete: tch.key });
+          } catch (e) {}
+          
+          await tch.sendMessage({
+            text: `*@${tch.sender.split("@")[0]}* anda terdeteksi mengirim link yang dilarang, anda mendapatkan *+1 warn*. jika warn sudah *3x* maka anda akan dikeluarkan & blacklist!!\n\nWarn: ${dbusr.warn} / 3`,
+            mentions: [tch.sender]
+          });
+        } catch (error) {
+          console.error('Error in anti link:', error);
+        }
+      }
+    }
+
+    if (!tch.isGroup && !tch.from.includes('newsletter') && !tch.from.includes('broadcast') && !tch.fromMe && dbset.firstchat) {
+      const lastChat = dbusr?.lastChat || 0;
+      if (Date.now() - lastChat >= 86400000 && tch.text && tch.text.length > 0) {
+        await tch.sendMessage({
+          text: `Halo kak 👋\nSelamat datang di WhatsApp Bot.\nini adalah bot WhatsApp otomatis\nKetik *.menu* untuk melihat menu.\n\n> Source: https://github.com/techwiz37/mywabot-baileys`
+        }, { quoted: tch.msg });
+        
+        dbusr.lastChat = Date.now();
+        tch.db.set('users', tch.sender, dbusr);
+      }
+    }
+  });
+}

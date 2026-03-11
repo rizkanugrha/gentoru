@@ -1,0 +1,24 @@
+{
+    "name": "botwa-base",
+    "version": "1.0.0",
+    "description": "WhatsApp Bot Base dengan Baileys WhiskeySockets",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "node --watch index.js"
+    },
+    "keywords": [
+        "whatsapp",
+        "bot",
+        "baileys",
+        "whiskeysockets"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "mongodb": "^6.21.0",
+        "pino": "^8.21.0",
+        "baileys": "github:Whiskeysockets/Baileys"
+    }
+}

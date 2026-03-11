@@ -1,0 +1,43 @@
+export default function(techwiz) {
+  techwiz.on({
+    cmd: ['*'],
+    desc: 'Message response handler',
+    noPrefix: true
+  }, async (tch) => {
+    if (tch.body && tch.body.toLowerCase() === "menarik balik") {
+      const setting = tch.db.get('setting', 'setting', {});
+      
+      if (!setting[tch.from]) {
+        setting[tch.from] = {
+          history: [],
+          log: 0
+        };
+        tch.db.set('setting', 'setting', setting);
+      }
+
+      if (setting[tch.from].history.length === 0) {
+        await tch.reply(`Tidak ada operasi yang dapat ditarik kembali.`);
+        return;
+      }
+
+      let lastOperation = setting[tch.from].history.pop();
+      while (lastOperation && lastOperation.isDone) {
+        lastOperation = setting[tch.from].history.pop();
+      }
+
+      if (!lastOperation) {
+        await tch.reply(`Tidak ada operasi yang dapat ditarik kembali.`);
+        return;
+      }
+
+      setting[tch.from].log -= lastOperation.hasil;
+      tch.db.set('setting', 'setting', setting);
+      
+      await tch.reply(`Total Tagihan : Rp${setting[tch.from].log.toLocaleString('id-ID')}
+Penarikan Berhasil : Rp${lastOperation.hasil.toLocaleString('id-ID')}
+======
+${lastOperation.operationDetails} #done
+======`);
+    }
+  });
+}
