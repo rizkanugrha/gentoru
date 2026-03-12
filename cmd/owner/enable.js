@@ -1,40 +1,41 @@
-export default function(techwiz) {
-  techwiz.on({
+export default function (commander) {
+  commander.on({
     cmd: ['on', 'enable'],
     desc: 'Enable features',
+    usage: '',
     isOwner: true
-  }, async (tch) => {
-    const setting = tch.db.get('setting', 'setting', {});
+  }, async (m) => {
+    const setting = m.db.get('setting', 'setting', {});
 
-    const text = tch.text.trim().toLowerCase();
+    const text = m.text.trim().toLowerCase();
     switch (text) {
       case '1':
         setting.firstchat = true;
-        tch.db.set('setting', 'setting', setting);
-        await tch.reply('_First chat berhasil diaktifkan!!_');
+        m.db.set('setting', 'setting', setting);
+        await m.reply('_First chat berhasil diaktifkan!!_');
         break;
       case '2':
         setting.readstory = true;
-        tch.db.set('setting', 'setting', setting);
-        await tch.reply('_Read story berhasil diaktifkan!!_');
+        m.db.set('setting', 'setting', setting);
+        await m.reply('_Read story berhasil diaktifkan!!_');
         break;
       case '3':
         setting.reactstory = true;
-        tch.db.set('setting', 'setting', setting);
-        await tch.reply('_Reaction story berhasil diaktifkan!!_');
+        m.db.set('setting', 'setting', setting);
+        await m.reply('_Reaction story berhasil diaktifkan!!_');
         break;
       case '4':
         setting.autoread = true;
-        tch.db.set('setting', 'setting', setting);
-        await tch.reply('_Auto read chat berhasil diaktifkan!!_');
+        m.db.set('setting', 'setting', setting);
+        await m.reply('_Auto read chat berhasil diaktifkan!!_');
         break;
       case '5':
         setting.self = true;
-        tch.db.set('setting', 'setting', setting);
-        await tch.reply('_Self mode berhasil diaktifkan!!_');
+        m.db.set('setting', 'setting', setting);
+        await m.reply('_Self mode berhasil diaktifkan!!_');
         break;
       default:
-        await tch.reply(`_Tidak ada fitur yang ditemukan_
+        await m.reply(`_Tidak ada fitur yang ditemukan_
 
 *List fitur:*
 1. First chat

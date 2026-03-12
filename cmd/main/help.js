@@ -1,11 +1,12 @@
-export default function (techwiz) {
-    techwiz.on({
+export default function (commander) {
+    commander.on({
         cmd: ['help', 'menu'],
         desc: 'Show help menu',
+        usage: '',
         noPrefix: false
-    }, async (tch) => {
-        const commands = techwiz.getCommands();
-        const prefix = tch.sock.config?.prefix || '.';
+    }, async (m) => {
+        const commands = commander.getCommands();
+        const prefix = m.sock.config?.prefix || '.';
 
         let helpText = `*BotWA Help Menu*\n\n`;
         helpText += `Prefix: *${prefix}*\n\n`;
@@ -24,10 +25,10 @@ export default function (techwiz) {
             helpText += `\n*${category}:*\n`;
             cmds.forEach(cmd => {
                 const cmdName = cmd.cmd[0];
-                helpText += `• ${prefix}${cmdName} - ${cmd.desc}\n`;
+                helpText += `• *${prefix}${cmdName}* ${cmd.usage}\n`;
             });
         }
 
-        await tch.reply(helpText);
+        await m.reply(helpText);
     });
 }

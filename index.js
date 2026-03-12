@@ -11,10 +11,13 @@ import { join, relative } from 'path';
 import { pathToFileURL } from 'url';
 import config from './config.js';
 import db from './lib/database.js';
-import { commandHandler } from './lib/helper/command.js';
 import schema from './lib/db/schema.js';
 
-// Mengimpor utility functions yang telah dipisah
+// Mengimpor class dari folder helper
+import { CommandHandler } from './lib/helper/command.js';
+import { MessageSerializer } from './lib/helper/serialize.js';
+import { MessageProcessor } from './lib/helper/process.js';
+import { SocketExtender } from './lib/helper/socket.js';
 import {
   formatLog,
   formatContactLog,
@@ -22,6 +25,11 @@ import {
   hasSession,
   parsePhoneNumber
 } from './lib/helper/utils.js';
+
+// Inisialisasi instance dari masing-masing class helper
+const commandHandler = new CommandHandler();
+const messageSerializer = new MessageSerializer();
+const messageProcessor = new MessageProcessor(commandHandler, messageSerializer);
 
 const logger = pino({
   level: 'error',
@@ -125,6 +133,9 @@ async function startBot() {
       }
     });
 
+    const extender = new SocketExtender(sock, db);
+    sock = extender.extend();
+
     if (!state.creds?.registered && !isWaitingForPairing) {
       log.info(`Requesting pairing code for: ${botNumber}...`);
       const timer = setTimeout(async () => {
@@ -222,22 +233,6 @@ async function startBot() {
     });
 
     sock.ev.on('creds.update', saveCreds);
-
-    sock.getName = (jid) => {
-      let id = jidNormalizedUser(jid);
-      if (!id || typeof id !== 'string') return 'none';
-      if (id.endsWith('g.us')) {
-        return 'Group';
-      } else {
-        const contact = db.get('contacts', id, {});
-        return (
-          contact?.name ||
-          contact?.verifiedName ||
-          contact?.notify ||
-          parsePhoneNumber(id.split('@')[0])
-        );
-      }
-    };
 
     sock.ev.on('messages.upsert', async (m) => {
       const messages = m.messages;
@@ -385,11 +380,17 @@ async function handleIncomingMessage(msg) {
   try {
     const pushName = msg.pushName || '';
     console.log(formatLog(msg, pushName, sock));
-    const tch = commandHandler.serializeTch(msg, false, sock, db);
-    if (tch && !msg.key?.fromMe) {
-      await schema.schema(tch, sock, db);
+
+    // Menggunakan instance dari MessageSerializer
+    const m = messageSerializer.serialize(msg, false, sock, db);
+
+    if (m && !msg.key?.fromMe) {
+      await schema.schema(m, sock, db);
     }
-    await commandHandler.process(sock, msg, db);
+
+    // Menggunakan instance dari MessageProcessor
+    await messageProcessor.process(sock, msg, db);
+
   } catch (error) {
     console.error('Message processing error:', error?.message || error);
   } finally {

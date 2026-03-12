@@ -1,19 +1,31 @@
-export default function(techwiz) {
-  techwiz.on({
-    cmd: ['eval', 'e'],
+import util from 'util'
+export default function (commander) {
+  commander.on({
+    cmd: ['eval', 'e', '>'],
     desc: 'Evaluate JavaScript code (Owner only)',
+    usage: '',
+    noPrefix: true,
     isOwner: true
-  }, async (tch) => {
-    const code = tch.args.join(' ');
-    if (!code) {
-      return await tch.reply('Please provide code to evaluate');
+  }, async (m) => {
+    const text = m.args.join(' ');
+    if (!text) {
+      return await m.reply('Please provide code to evaluate');
     }
-    
+
+    let evalCmd;
     try {
-      const result = eval(code);
-      await tch.reply(`Result:\n\`\`\`${JSON.stringify(result, null, 2)}\`\`\``);
-    } catch (error) {
-      await tch.reply(`Error:\n\`\`\`${error.message}\`\`\``);
+      evalCmd = /await/i.test(text)
+        ? eval('(async () => { ' + text + ' })()')
+        : eval(text);
+    } catch (e) {
+      return await m.reply(util.format(e));
+    }
+
+    try {
+      const result = await evalCmd;
+      await m.reply(util.format(result));
+    } catch (err) {
+      await m.reply(util.format(err));
     }
   });
 }
