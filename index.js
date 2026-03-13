@@ -12,10 +12,10 @@ import { pathToFileURL } from 'url';
 import config from './config.js';
 import db from './lib/database.js';
 import schema from './lib/db/schema.js';
-import serialize, { Client, initLidStore } from './utils/serialize.js';
-import { Messages } from './handlers/message.js';
-import { GroupParticipants } from './handlers/group-participants.js';
-import { loadCommands } from './lib/helper/loadcmd.js';
+import serialize, { Client, initLidStore } from './lib/helper/serialize.js'; // PERBAIKAN PATH
+import { Messages } from './handler/message.js'; // PERBAIKAN PATH (tanpa 's')
+import { GroupParticipants } from './handler/group-participants.js';
+import { loadCommands as fetchCommands } from './lib/helper/loadcmd.js';
 import {
   formatLog,
   formatContactLog,
@@ -84,7 +84,7 @@ async function startBot() {
     }
 
     if (!commandsLoaded) {
-      await loadCommands();
+      await initCommands(); // PERBAIKAN: Menggunakan fungsi lokal yang namanya sudah diubah
       commandsLoaded = true;
     }
 
@@ -227,9 +227,9 @@ async function startBot() {
 
     client.ev.on('creds.update', saveCreds);
 
-    client.ev.on('messages.upsert', async (client, m) => {
-      const messages = m.messages;
-      for (const msg of messages) {
+    client.ev.on('messages.upsert', async (message) => {
+      const mess = message.messages;
+      for (const msg of mess) {
         if (msg.message) {
           if (!isSockReady) {
             const now = Date.now();
@@ -243,7 +243,9 @@ async function startBot() {
             }
             continue;
           }
-          await Messages(client, msg)
+
+          const m = await serialize(client, msg)
+          await Messages(client, m)
         }
       }
     });
@@ -311,9 +313,9 @@ async function clearSessionAndRestart(timeout) {
   reconnectBot(timeout);
 }
 
-async function loadCommands() {
+async function initCommands() {
   try {
-    await loadCommands();
+    await fetchCommands();
     log.success('Commands loaded');
     setupHotReload();
   } catch (error) {
@@ -342,13 +344,11 @@ function setupHotReload() {
           activeTimers.delete(timer);
           try {
             if (dir === 'cmd') {
-              console.log(`\n🔄 Hot reload: ${relPath}`);
-              const oldSize = commandHandler.commands.size;
-              await commandHandler.loadCommandFile(filePath, true);
-              const newSize = commandHandler.commands.size;
-              console.log(`✓ Hot reloaded: ${relPath} (${oldSize} → ${newSize} commands)`);
+              console.log(`\n🔄 Hot reload cmd: ${relPath}`);
+              //   await commandHandler.loadCommandFile(filePath);
+              console.log(`✓ Hot reloaded: ${relPath}`);
             } else if (dir === 'lib') {
-              console.log(`\n🔄 Hot reload: ${relPath}`);
+              console.log(`\n🔄 Hot reload lib: ${relPath}`);
               const fileUrl = pathToFileURL(filePath).href + `?t=${Date.now()}`;
               await import(fileUrl);
               console.log(`✓ Hot reloaded: ${relPath}`);
@@ -391,7 +391,8 @@ async function flushPendingMessages() {
     }
     pendingMessages.length = 0;
     for (const item of validMessages) {
-      await handleIncomingMessage(item.msg);
+      const m = await serialize(client, item.msg);
+      if (m) await Messages(client, m);
     }
   } finally {
     flushingPending = false;

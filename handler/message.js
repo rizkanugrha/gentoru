@@ -8,13 +8,14 @@
  * If you want to be appreciated by others, then don't change anything in this script.
  * Please respect me for making this tool from the beginning.
  */
-
 import util from 'util';
-import Color from '../lib/color.js';
-import { commands, events } from '../lib/loadcmd.js';
+import Color from '../lib/utils/color.js';
+import { commands, events } from '../lib/helper/loadcmd.js';
 import moment from 'moment';
 import config from '../config.js';
-import { cutStr } from '../lib/function.js';
+import { cutStr } from '../lib/utils/function.js';
+import { formatLog } from '../lib/helper/utils.js';
+
 //import { groupManage, statistics, UserManage } from '../database/database.js';
 /**
  * 
@@ -26,6 +27,7 @@ import { cutStr } from '../lib/function.js';
 
 export async function Messages(client, m) {
     try {
+        console.log(formatLog(m, m.pushName));
 
         let quoted = m.isQuoted ? m.quoted : m;
         let downloadM = async filename => await client.downloadMediaMessage(quoted, filename);

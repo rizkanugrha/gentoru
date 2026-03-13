@@ -13,7 +13,7 @@ export default {
     name: 'self-rzk',
     prefix: '`',
     owner: ["6285314240519"],
-    no_bot: "6285314240519",
+    no_bot: "6287868261186",
     packname: 'self-rzk',
     author: '@rizkanugraha',
     sessionPath: './database/sessions',

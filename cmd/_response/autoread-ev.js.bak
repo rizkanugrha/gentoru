@@ -1,0 +1,27 @@
+/**
+ * Nama File: autoread-ev.js
+ * Lokasi: folder cmd/
+ * Deskripsi: Otomatis read pesan masuk (centang biru)
+ */
+
+export default function (commander) {
+    commander.on({
+        // Karena ini event otomatis, kita tidak butuh properti 'cmd' atau 'aliases'
+        execute: async (m, { client }) => {
+            try {
+                // Pastikan yang di-read hanya pesan dari orang lain (bukan pesan dari bot itu sendiri)
+                if (!m.fromMe) {
+
+                    // 1. Fitur Auto Read (Otomatis Centang Biru)
+                    await client.readMessages([m.key]);
+
+                    // 2. Fitur Auto Typing (Opsional)
+                    // Hapus tanda '//' di bawah ini jika ingin bot otomatis berstatus "sedang mengetik" saat menerima pesan
+                    // await client.sendPresenceUpdate('composing', m.from);
+                }
+            } catch (error) {
+                console.error("❌ Error di event autoread:", error.message);
+            }
+        }
+    });
+}
