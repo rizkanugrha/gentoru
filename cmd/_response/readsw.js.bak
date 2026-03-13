@@ -1,0 +1,17 @@
+import { sendTelegram } from "../../../gentoo/src/lib/function.js";
+import config from "../../config.js";
+
+
+export default function (commander) {
+  commander.on({
+    cmd: ['*'],
+    desc: '',
+    noPrefix: true
+  }, async (m) => {
+    // const dbusr = m.db.get('users', m.sender, {});
+    // const dbgc = m.db.get('groups', m.from, {});
+    // const dbset = m.db.get('setting', 'setting', {});
+
+
+  });
+}

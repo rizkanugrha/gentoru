@@ -13,6 +13,7 @@ export default {
     name: 'self-rzk',
     prefix: '.',
     owner: ["6285314240519"],
+    no_bot: "6285314240519",
     packname: 'self-rzk',
     author: '@rizkanugraha',
     sessionPath: './database/sessions'
@@ -35,5 +36,9 @@ export default {
   },
   logger: {
     level: 'info'
+  },
+  tele: {
+    TELEGRAM_TOKEN: "7352968097:AAGnfK_e4aIevsxfoVtUUJcGNurnT0qGICk",
+    ID_TELEGRAM: "5403773303"
   }
 }
