@@ -12,12 +12,10 @@ import { pathToFileURL } from 'url';
 import config from './config.js';
 import db from './lib/database.js';
 import schema from './lib/db/schema.js';
-
-// Mengimpor class dari folder helper
-import { CommandHandler } from './lib/helper/command.js';
-import { MessageSerializer } from './lib/helper/serialize.js';
-import { MessageProcessor } from './lib/helper/process.js';
-import { SocketExtender } from './lib/helper/socket.js';
+import serialize, { Client, initLidStore } from './utils/serialize.js';
+import { Messages } from './handlers/message.js';
+import { GroupParticipants } from './handlers/group-participants.js';
+import { loadCommands } from './lib/helper/loadcmd.js';
 import {
   formatLog,
   formatContactLog,
@@ -25,11 +23,6 @@ import {
   hasSession,
   parsePhoneNumber
 } from './lib/helper/utils.js';
-
-// Inisialisasi instance dari masing-masing class helper
-const commandHandler = new CommandHandler();
-const messageSerializer = new MessageSerializer();
-const messageProcessor = new MessageProcessor(commandHandler, messageSerializer);
 
 const logger = pino({
   level: 'error',
@@ -46,7 +39,7 @@ if (!existsSync(config.bot.sessionPath)) {
   mkdirSync(config.bot.sessionPath, { recursive: true });
 }
 
-global.sock = null;
+let client = null;
 let botNumber = null;
 let isReconnecting = false;
 let isWaitingForPairing = false;
@@ -67,12 +60,12 @@ async function startBot() {
 
   try {
     isSockReady = false;
-    if (sock) {
+    if (client) {
       try {
-        sock.ev.removeAllListeners();
-        await sock.end();
+        client.ev.removeAllListeners();
+        await client.end();
       } catch (e) { }
-      sock = null;
+      client = null;
     }
 
     if (pendingMessages.length > 0) {
@@ -102,7 +95,7 @@ async function startBot() {
     const versionStr = Array.isArray(version) ? version.join('.') : version;
     log.info(`Using Baileys version: ${versionStr}`);
 
-    sock = makeWASocket({
+    client = makeWASocket({
       version,
       logger,
       auth: {
@@ -133,18 +126,16 @@ async function startBot() {
       }
     });
 
-    const extender = new SocketExtender(sock, db);
-    sock = extender.extend();
 
     if (!state.creds?.registered && !isWaitingForPairing) {
       log.info(`Requesting pairing code for: ${botNumber}...`);
       const timer = setTimeout(async () => {
         activeTimers.delete(timer);
         try {
-          if (!sock.authState?.creds?.registered) {
+          if (!client.authState?.creds?.registered) {
             isWaitingForPairing = true;
             const phoneNumber = botNumber.replace(/[^0-9]/g, '');
-            const code = await sock.requestPairingCode(phoneNumber);
+            const code = await client.requestPairingCode(phoneNumber);
             const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
             console.log(`\n╔════════════════════════════════╗`);
             console.log(`║   Pairing Code: ${formattedCode}   ║`);
@@ -160,11 +151,13 @@ async function startBot() {
       activeTimers.add(timer);
     }
 
-    sock.ev.on('connection.update', async (update) => {
+    await Client({ client });
+
+    client.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr, receivedPendingNotifications } = update;
 
-      if (receivedPendingNotifications && !sock.authState?.creds?.myAppStateKeyId) {
-        sock.ev.flush();
+      if (receivedPendingNotifications && !client.authState?.creds?.myAppStateKeyId) {
+        client.ev.flush();
       }
 
       if (connection === 'connecting') {
@@ -232,9 +225,9 @@ async function startBot() {
       }
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    client.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('messages.upsert', async (m) => {
+    client.ev.on('messages.upsert', async (client, m) => {
       const messages = m.messages;
       for (const msg of messages) {
         if (msg.message) {
@@ -250,14 +243,14 @@ async function startBot() {
             }
             continue;
           }
-          await handleIncomingMessage(msg);
+          await Messages(client, msg)
         }
       }
     });
 
-    sock.ev.on('contacts.update', async (update) => {
+    client.ev.on('contacts.update', async (update) => {
       for (const contact of update) {
-        console.log(formatContactLog(contact, 'update', sock));
+        console.log(formatContactLog(contact, 'update', client));
         const id = jidNormalizedUser(contact.id);
         if (db) {
           const existing = db.get('contacts', id, {});
@@ -269,9 +262,9 @@ async function startBot() {
       }
     });
 
-    sock.ev.on('contacts.upsert', async (update) => {
+    client.ev.on('contacts.upsert', async (update) => {
       for (const contact of update) {
-        console.log(formatContactLog(contact, 'upsert', sock));
+        console.log(formatContactLog(contact, 'upsert', client));
         const id = jidNormalizedUser(contact.id);
         if (db) {
           db.set('contacts', id, {
@@ -282,8 +275,8 @@ async function startBot() {
       }
     });
 
-    commandHandler.setPrefix(config.bot.prefix);
-    sock.config = config.bot;
+
+    client.config = config.bot;
 
   } catch (error) {
     log.error('Error starting bot: ' + error.message);
@@ -320,7 +313,7 @@ async function clearSessionAndRestart(timeout) {
 
 async function loadCommands() {
   try {
-    await commandHandler.loadCommands();
+    await loadCommands();
     log.success('Commands loaded');
     setupHotReload();
   } catch (error) {
@@ -376,50 +369,7 @@ function setupHotReload() {
   });
 }
 
-async function handleIncomingMessage(msg) {
-  try {
-    const pushName = msg.pushName || '';
-    console.log(formatLog(msg, pushName, sock));
 
-    // Menggunakan instance dari MessageSerializer
-    const m = messageSerializer.serialize(msg, false, sock, db);
-
-    if (m && !msg.key?.fromMe) {
-      await schema.schema(m, sock, db);
-    }
-
-    if (m.key && !m.key.fromMe && m.key.remoteJid === 'status@broadcast') {
-      // if (m.msgType === 'protocolMessage') return;
-
-      sock.readMessages([m.key]).catch(() => { });
-
-      if (config.tele.TELEGRAM_TOKEN && config.tele.ID_TELEGRAM) {
-        let id = m.key.participant || m.key.remoteJid;
-        let name = m.pushName;
-
-        let text = `Status dari ${name} (${id.split('@')[0]})\n${m.body || ''}`;
-
-        if (m.isMedia) {
-          let media = await sock.downloadMediaMessage(m);
-          sendTelegram(config.tele.ID_TELEGRAM, media, { type: /audio/.test(m.msg.mimetype) ? 'document' : '', caption: text }).catch(() => { });
-        } else {
-          sendTelegram(config.tele.ID_TELEGRAM, text).catch(() => { });
-        }
-      }
-
-    }
-    if ((config.bot.private === 'true' || config.bot.private === true) && !m.isOwner) return;
-    // Menggunakan instance dari MessageProcessor
-    await messageProcessor.process(sock, msg, db);
-
-  } catch (error) {
-    console.error('Message processing error:', error?.message || error);
-  } finally {
-    if (global.gc && Math.random() < 0.01) {
-      global.gc();
-    }
-  }
-}
 
 async function flushPendingMessages() {
   if (flushingPending) return;
@@ -471,11 +421,11 @@ async function cleanup() {
 
   pendingMessages.length = 0;
 
-  if (sock) {
+  if (client) {
     try {
-      await sock.end();
+      await client.end();
     } catch (e) { }
-    sock = null;
+    client = null;
   }
 
   await db.disconnect();
