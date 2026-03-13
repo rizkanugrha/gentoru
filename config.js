@@ -11,12 +11,13 @@ export default {
   },
   bot: {
     name: 'self-rzk',
-    prefix: '.',
+    prefix: '`',
     owner: ["6285314240519"],
     no_bot: "6285314240519",
     packname: 'self-rzk',
     author: '@rizkanugraha',
-    sessionPath: './database/sessions'
+    sessionPath: './database/sessions',
+    private: true,
   },
   removeBG: [
     "NQYeJiBQ7dxsVDpd23WBGqje",

@@ -3,21 +3,21 @@ import util from 'util'
 
 export default function (commander) {
     commander.on({
-        cmd: ['ping', 'p'],
+        cmd: ['ambil'],
         desc: 'Test bot response',
         usage: '',
     }, async (m) => {
         try {
             let msg = m.quoted ? m.quoted : m;
-            const buffer = await client.downloadMediaMessage(msg)
+            const buffer = await sock.downloadMediaMessage(msg)
             if (msg.type === 'videoMessage') {
-                await client.sendMessage(m.from, { video: buffer, force: true }, { quoted: m })
+                await sock.sendMessage(m.from, { video: buffer, force: true }, { quoted: m })
             } else if (msg.type === 'imageMessage') {
-                await client.sendMessage(m.from, { image: buffer, force: true }, { quoted: m })
+                await sock.sendMessage(m.from, { image: buffer, force: true }, { quoted: m })
             } else if (msg.type === 'documentMessage') {
-                await client.sendMessage(m.from, { image: buffer, force: true }, { quoted: m })
+                await sock.sendMessage(m.from, { image: buffer, force: true }, { quoted: m })
             } else if (msg.type === 'audioMessage') {
-                await client.sendMessage(m.from, { audio: buffer, force: true }, { quoted: m })
+                await sock.sendMessage(m.from, { audio: buffer, force: true }, { quoted: m })
             }
         } catch (error) {
             console.log(error)

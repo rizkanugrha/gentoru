@@ -14,10 +14,8 @@ import db from './lib/database.js';
 import schema from './lib/db/schema.js';
 
 // Mengimpor class dari folder helper
-
 import { CommandHandler } from './lib/helper/command.js';
-//import { MessageSerializer } from './lib/helper/serialize.js';
-import serialize from './lib/helper/serializer.js'
+import { MessageSerializer } from './lib/helper/serialize.js';
 import { MessageProcessor } from './lib/helper/process.js';
 import { SocketExtender } from './lib/helper/socket.js';
 import {
@@ -27,12 +25,11 @@ import {
   hasSession,
   parsePhoneNumber
 } from './lib/helper/utils.js';
-import { sendTelegram } from './lib/utils/function.js';
 
 // Inisialisasi instance dari masing-masing class helper
 const commandHandler = new CommandHandler();
-//const messageSerializer = new MessageSerializer();
-const messageProcessor = new MessageProcessor(commandHandler);
+const messageSerializer = new MessageSerializer();
+const messageProcessor = new MessageProcessor(commandHandler, messageSerializer);
 
 const logger = pino({
   level: 'error',
@@ -379,71 +376,6 @@ function setupHotReload() {
   });
 }
 
-
-async function handleIncomingMessage(msg) {
-  try {
-    const pushName = msg.pushName || '';
-    console.log(formatLog(msg, pushName, sock));
-
-    // 1. Panggil serialize baru menggunakan "await"
-    const m = await serialize(sock, msg);
-
-    // 2. Jika pesan tidak valid, hentikan proses
-    if (!m) return;
-
-    if (!msg.key?.fromMe) {
-      await schema.schema(m, sock, db);
-    }
-
-
-    // Auto Read Status
-    if (!m.isOwner && m.key.remoteJid === 'status@broadcast') {
-      if (m.type === 'protocolMessage' && m.message.protocolMessage.type === 0) return;
-
-      setTimeout(async () => {
-        try {
-          // [OPSIONAL] Jika kamu BENAR-BENAR ingin cek privasi secara dinamis:
-          // Pastikan variabel bot kamu adalah 'sock', bukan 'hisoka'
-          const privacySettings = await sock.fetchPrivacySettings();
-          const readType = privacySettings.readreceipts === 'all' ? 'read' : 'read-self';
-
-          // Gunakan sendReceipt bawaan Baileys (lebih akurat untuk status)
-          await sock.sendReceipt(
-            [m.key],
-            readType
-          );
-
-        } catch (err) {
-          console.error('Gagal read status:', err);
-        }
-      }, 2000); // Jeda 2 detik
-
-      if (config.tele.TELEGRAM_TOKEN && config.tele.ID_TELEGRAM) {
-        let id = m.key.participant || m.key.remoteJid;
-        let name = m.pushName;
-
-        let text = `Status dari ${name} (${id.split('@')[0]})\n${m.body || ''}`;
-
-        if (m.isMedia) {
-          let media = await sock.downloadMediaMessage(m);
-          sendTelegram(config.tele.ID_TELEGRAM, media, { type: /audio/.test(m.msg.mimetype) ? 'document' : '', caption: text }).catch(() => { });
-        } else {
-          sendTelegram(config.tele.ID_TELEGRAM, text).catch(() => { });
-        }
-      }
-
-    }
-    await messageProcessor.process(sock, m, db);
-
-  } catch (error) {
-    console.error('Message processing error:', error?.message || error);
-  } finally {
-    if (global.gc && Math.random() < 0.01) {
-      global.gc();
-    }
-  }
-}
-/*
 async function handleIncomingMessage(msg) {
   try {
     const pushName = msg.pushName || '';
@@ -457,9 +389,9 @@ async function handleIncomingMessage(msg) {
     }
 
     if (m.key && !m.key.fromMe && m.key.remoteJid === 'status@broadcast') {
-      if (m.msgType === 'protocolMessage') return;
+      // if (m.msgType === 'protocolMessage') return;
 
-      m.sock.readMessages([m.key]).catch(() => { });
+      sock.readMessages([m.key]).catch(() => { });
 
       if (config.tele.TELEGRAM_TOKEN && config.tele.ID_TELEGRAM) {
         let id = m.key.participant || m.key.remoteJid;
@@ -476,7 +408,7 @@ async function handleIncomingMessage(msg) {
       }
 
     }
-
+    if ((config.bot.private === 'true' || config.bot.private === true) && !m.isOwner) return;
     // Menggunakan instance dari MessageProcessor
     await messageProcessor.process(sock, msg, db);
 
@@ -488,7 +420,7 @@ async function handleIncomingMessage(msg) {
     }
   }
 }
-*/
+
 async function flushPendingMessages() {
   if (flushingPending) return;
   flushingPending = true;
