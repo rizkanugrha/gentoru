@@ -7,15 +7,15 @@ import makeWASocket, {
 } from 'baileys';
 import pino from 'pino';
 import { existsSync, mkdirSync, watch } from 'fs';
-import { join, relative } from 'path';
+import path, { join, relative } from 'path';
 import { pathToFileURL } from 'url';
 import config from './config.js';
 import db from './lib/database.js';
 import schema from './lib/db/schema.js';
-import serialize, { Client, initLidStore } from './lib/helper/serialize.js'; // PERBAIKAN PATH
+import serialize, { Client } from './lib/helper/serialize.js'; // PERBAIKAN PATH
 import { Messages } from './handler/message.js'; // PERBAIKAN PATH (tanpa 's')
 import { GroupParticipants } from './handler/group-participants.js';
-import { loadCommands as fetchCommands } from './lib/helper/loadcmd.js';
+
 import {
   formatLog,
   formatContactLog,
@@ -23,6 +23,11 @@ import {
   hasSession,
   parsePhoneNumber
 } from './lib/helper/utils.js';
+import { ResponseHandler } from './lib/helper/commands/responseHandler.js';
+import { CommandHandler } from './lib/helper/commands/commandHandler.js';
+import { CommandLoader } from './lib/helper/commands/commandLoader.js';
+
+
 
 const logger = pino({
   level: 'error',
@@ -52,6 +57,11 @@ let flushingPending = false;
 const activeTimers = new Set();
 const MAX_PENDING_MESSAGES = 200;
 const PENDING_MESSAGE_TTL = 3 * 60 * 1000;
+
+let commandHandler;
+let responseHandler;
+let cmdDir = path.resolve('./cmd')
+let loader;
 
 async function startBot() {
   if (isReconnecting) {
@@ -83,10 +93,6 @@ async function startBot() {
       botNumber = await getBotNumber(log);
     }
 
-    if (!commandsLoaded) {
-      await initCommands(); // PERBAIKAN: Menggunakan fungsi lokal yang namanya sudah diubah
-      commandsLoaded = true;
-    }
 
     const { state, saveCreds } = await useMultiFileAuthState(config.bot.sessionPath);
     const sessionExists = hasSession(config.bot.sessionPath) && state.creds?.registered;
@@ -126,6 +132,29 @@ async function startBot() {
       }
     });
 
+
+    if (!commandHandler) {
+
+      commandHandler = new CommandHandler(client)
+      responseHandler = new ResponseHandler(client)
+
+      loader = new CommandLoader(cmdDir, commandHandler, responseHandler)
+
+      log.info("Loading commands...")
+
+      await loader.loadAll()
+
+      setupHotReload()
+
+      commandsLoaded = true
+
+    } else {
+
+      // update client ketika reconnect
+      commandHandler.client = client
+      responseHandler.client = client
+
+    }
 
     if (!state.creds?.registered && !isWaitingForPairing) {
       log.info(`Requesting pairing code for: ${botNumber}...`);
@@ -245,7 +274,7 @@ async function startBot() {
           }
 
           const m = await serialize(client, msg)
-          await Messages(client, m)
+          await Messages(client, m, commandHandler, responseHandler);
         }
       }
     });
@@ -313,20 +342,17 @@ async function clearSessionAndRestart(timeout) {
   reconnectBot(timeout);
 }
 
-async function initCommands() {
-  try {
-    await fetchCommands();
-    log.success('Commands loaded');
-    setupHotReload();
-  } catch (error) {
-    log.error('Error loading commands: ' + error.message);
-  }
-}
+// async function initCommands() {
+//   try {
 
+//   } catch (error) {
+//     log.error('Error loading commands: ' + error.message);
+//   }
+// }
 function setupHotReload() {
   if (hotReloadStarted) return;
   hotReloadStarted = true;
-  const watchDirs = ['cmd', 'lib'];
+  const watchDirs = ['lib', 'handler'];
 
   watchDirs.forEach(dir => {
     const dirPath = join(process.cwd(), dir);
@@ -343,16 +369,10 @@ function setupHotReload() {
         const timer = setTimeout(async () => {
           activeTimers.delete(timer);
           try {
-            if (dir === 'cmd') {
-              console.log(`\n🔄 Hot reload cmd: ${relPath}`);
-              //   await commandHandler.loadCommandFile(filePath);
-              console.log(`✓ Hot reloaded: ${relPath}`);
-            } else if (dir === 'lib') {
-              console.log(`\n🔄 Hot reload lib: ${relPath}`);
-              const fileUrl = pathToFileURL(filePath).href + `?t=${Date.now()}`;
-              await import(fileUrl);
-              console.log(`✓ Hot reloaded: ${relPath}`);
-            }
+            console.log(`\n🔄 Hot reload lib: ${relPath}`);
+            const fileUrl = pathToFileURL(filePath).href + `?t=${Date.now()}`;
+            await import(fileUrl);
+            console.log(`✓ Hot reloaded: ${relPath}`);
           } catch (error) {
             console.error(`✗ Hot reload failed for ${relPath}:`, error.message);
           }
@@ -368,8 +388,6 @@ function setupHotReload() {
     }
   });
 }
-
-
 
 async function flushPendingMessages() {
   if (flushingPending) return;
@@ -392,7 +410,7 @@ async function flushPendingMessages() {
     pendingMessages.length = 0;
     for (const item of validMessages) {
       const m = await serialize(client, item.msg);
-      if (m) await Messages(client, m);
+      await Messages(client, m, commandHandler, responseHandler);
     }
   } finally {
     flushingPending = false;

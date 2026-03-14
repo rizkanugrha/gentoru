@@ -1,26 +1,24 @@
 
-export default function (commander) {
-  commander.on({
-    cmd: ['ping', 'p'],
-    execute: async (m, { client, body, args }) => {
-      const start = Date.now();
+export default {
+  name: "ping",
+  cmd: ["ping"],
 
-      // 1. Kirim pesan awalan (misal: "Pinging...")
-      const sentMsg = await m.reply('Menghitung ping... 🏓');
+  async execute(m) {
+    const nim = ctx.args[0];
+    const start = Date.now();
 
-      // 2. Kalkulasi waktu jeda
-      const latency = Date.now() - start;
+    const sentMsg = await m.reply('Menghitung ping... 🏓');
 
-      // 3. Edit pesan pertama agar terlihat lebih bersih (Fitur Baileys)
-      if (sentMsg && sentMsg.key) {
-        await m.sock.sendMessage(m.from, {
-          text: `*PONG!* 🏓\nLatensi: *${latency}ms*`,
-          edit: sentMsg.key
-        });
-      } else {
-        // Fallback jika karena alasan tertentu gagal mendapat context pesan sebelumnya
-        await m.reply(`*PONG!* 🏓\nLatensi: *${latency}ms*`);
-      }
+    const latency = Date.now() - start;
+
+    if (sentMsg && sentMsg.key) {
+      await client.sendMessage(m.from, {
+        text: `*PONG!* 🏓\nLatensi: *${latency}ms*`,
+        edit: sentMsg.key
+      });
+    } else {
+      // Fallback jika karena alasan tertentu gagal mendapat context pesan sebelumnya
+      await m.reply(`*PONG!* 🏓\nLatensi: *${latency}ms*`);
     }
-  });
+  }
 }
