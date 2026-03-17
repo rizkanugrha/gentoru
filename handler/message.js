@@ -7,32 +7,49 @@ import { formatLog } from "../lib/helper/utils.js"
 export async function Messages(client, m, commandHandler, responseHandler) {
 
     try {
-
         if (!m) return
 
-        //        console.log(formatLog(m, m.name))
+        const body = typeof m.body === "string" ? m.body.trim() : ""
+        //if (!body) return
+        let isCmd = m.isCmd || false
+        let command = m.command || null
+        let args = m.args || []
+        let prefix = m.prefix || ""
+        let cmdPlugin = null
 
-        if (!m.body) return
+        console.log(prefix, isCmd);
 
-        /*
-        ======================
-        COMMAND PARSER
-        ======================
-        */
+        if (isCmd && command) {
 
-        const prefix = config.bot.prefix
-        const body = m.body.trim()
+            cmdPlugin = commandHandler.get(command)
 
-        const isCmd = body.startsWith(prefix)
+        } else {
 
-        const args = isCmd
-            ? body.slice(prefix.length).trim().split(/ +/)
-            : []
+            // Logika untuk noPrefix command
+            const firstWord = body.split(" ")[0].toLowerCase()
 
-        const command = isCmd
-            ? args.shift().toLowerCase()
-            : null
+            for (const plugin of commandHandler.commands.values()) {
 
+                if (!plugin.noPrefix) continue
+
+                // Pastikan alias berbentuk Array agar aman saat menggunakan .includes()
+                const aliases = Array.isArray(plugin.cmd) ? plugin.cmd : [plugin.cmd]
+
+                if (aliases.includes(firstWord)) {
+
+                    cmdPlugin = plugin
+                    command = firstWord
+                    args = body.split(" ").slice(1)
+
+                    isCmd = true
+                    prefix = ""
+                    break
+
+                }
+
+            }
+
+        }
         /*
         ======================
         BASIC DATA
@@ -69,10 +86,11 @@ export async function Messages(client, m, commandHandler, responseHandler) {
         const ctx = {
             body,
             args,
-            cmd: command,
+            cmds: command,
             arg: args.join(" "),
             prefix,
             downloadM,
+            text: body,
 
             isOwner,
             isGroupMsg,
@@ -121,17 +139,11 @@ export async function Messages(client, m, commandHandler, responseHandler) {
 
         }
 
-        /*
-        ======================
-        COMMAND CHECK
-        ======================
-        */
-
         if (!isCmd) return
-
-        const cmdPlugin = commandHandler.get(command)
-
         if (!cmdPlugin) return
+        if (m.key.remoteJid === 'status@broadcast') return;
+        if (m.type === 'protocolMessage' && m.message.protocolMessage.type === 0) return;
+
 
         /*
         ======================
