@@ -150,7 +150,6 @@ async function startBot() {
 
     } else {
 
-      // update client ketika reconnect
       commandHandler.client = client
       responseHandler.client = client
 
@@ -352,7 +351,7 @@ async function clearSessionAndRestart(timeout) {
 function setupHotReload() {
   if (hotReloadStarted) return;
   hotReloadStarted = true;
-  const watchDirs = ['lib', 'handler'];
+  const watchDirs = ['lib'];
 
   watchDirs.forEach(dir => {
     const dirPath = join(process.cwd(), dir);

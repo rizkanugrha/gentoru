@@ -28,14 +28,6 @@ export default function (cmd) {
     }
   })
 
-  cmd.on({
-    name: "pong",
-    cmd: ["pong"],
-    async execute(m) {
-      await m.reply("Ping dong!")
-    }
-  })
-
 }
 
 /**

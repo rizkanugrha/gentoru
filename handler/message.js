@@ -11,38 +11,37 @@ export async function Messages(client, m, commandHandler, responseHandler) {
 
         const body = typeof m.body === "string" ? m.body.trim() : ""
         //if (!body) return
-        let isCmd = m.isCmd || false
-        let command = m.command || null
+
+
+        const prefix = m.prefix
+        let isCmd = m.isCmd
         let args = m.args || []
-        let prefix = m.prefix || ""
+        let command = m.command
         let cmdPlugin = null
 
-        console.log(prefix, isCmd);
+        if (isCmd) {
 
-        if (isCmd && command) {
+            args = body.slice(prefix.length).trim().split(/ +/)
+            command = args.shift()?.toLowerCase()
 
             cmdPlugin = commandHandler.get(command)
 
         } else {
 
-            // Logika untuk noPrefix command
+            // noPrefix command
             const firstWord = body.split(" ")[0].toLowerCase()
 
             for (const plugin of commandHandler.commands.values()) {
 
                 if (!plugin.noPrefix) continue
 
-                // Pastikan alias berbentuk Array agar aman saat menggunakan .includes()
-                const aliases = Array.isArray(plugin.cmd) ? plugin.cmd : [plugin.cmd]
-
-                if (aliases.includes(firstWord)) {
+                if (plugin.cmd && plugin.cmd.includes(firstWord)) {
 
                     cmdPlugin = plugin
                     command = firstWord
                     args = body.split(" ").slice(1)
 
                     isCmd = true
-                    prefix = ""
                     break
 
                 }
@@ -50,6 +49,7 @@ export async function Messages(client, m, commandHandler, responseHandler) {
             }
 
         }
+
         /*
         ======================
         BASIC DATA
@@ -141,6 +141,7 @@ export async function Messages(client, m, commandHandler, responseHandler) {
 
         if (!isCmd) return
         if (!cmdPlugin) return
+        if (config.bot.self === true && !isOwner) return
         if (m.key.remoteJid === 'status@broadcast') return;
         if (m.type === 'protocolMessage' && m.message.protocolMessage.type === 0) return;
 
