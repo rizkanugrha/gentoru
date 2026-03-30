@@ -4,6 +4,7 @@ export default function (cmd) {
   cmd.on({
     name: "tes",
     cmd: ["tes", "bot"],
+    category: "Main",
     desc: "test bot latency",
     noPrefix: true,
     async execute(client, m, ctx) {

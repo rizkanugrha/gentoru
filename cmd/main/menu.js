@@ -3,6 +3,7 @@ export default function (cmd) {
     cmd.on({
         name: "menu",
         cmd: ["menu", "help"],
+        category: "Main",
         desc: "Menampilkan daftar command",
         noPrefix: true,
         async execute(client, m, ctx) {

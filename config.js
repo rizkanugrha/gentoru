@@ -11,15 +11,15 @@ export default {
   },
   bot: {
     name: 'self-rzk',
-    prefix: '`',
+    prefix: '!',
     owner: [
       "6285314240519"
     ],
-    no_bot: "6285314240519",
+    no_bot: "6287868261186",
     packname: 'self-rzk',
-    author: '@rizkanugraha',
+    author: '@rizkanugraha_',
     sessionPath: './database/sessions',
-    self: true,
+    self: false,
   },
   removeBG: [
     "NQYeJiBQ7dxsVDpd23WBGqje",

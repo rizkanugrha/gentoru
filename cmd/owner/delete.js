@@ -4,7 +4,7 @@ export default function (cmd) {
 
     cmd.on({
         name: "delete",
-        cmd: ["del", "delete", "hapus"],
+        cmd: ["del", "delete"],
         category: 'Owner',
         pconly: false,
         group: false,
