@@ -40,6 +40,7 @@ gentoru/
 ├── lib/
 │   ├── utils/
 │   └── helper/
+├── src/
 ├── config.js
 ├── index.js
 └── package.json
