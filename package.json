@@ -1,5 +1,5 @@
 {
-    "name": "botwa-base",
+    "name": "gentoru",
     "version": "1.0.0",
     "description": "WhatsApp Bot Base dengan Baileys WhiskeySockets",
     "main": "index.js",
