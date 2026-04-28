@@ -1,7 +1,7 @@
 # 🚀 Gentoru Bot
 
 ![Node.js](https://img.shields.io/badge/Node.js-18.x-green)
-![License](https://img.shields.io/badge/License-MIT-blue)
+![License](https://img.shields.io/badge/License-GPU-blue)
 ![Repo Size](https://img.shields.io/github/repo-size/rizkanugrha/gentoru)
 ![Last Commit](https://img.shields.io/github/last-commit/rizkanugrha/gentoru)
 ![Issues](https://img.shields.io/github/issues/rizkanugrha/gentoru)
