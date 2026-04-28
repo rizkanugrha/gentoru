@@ -15,7 +15,7 @@ Gentoru adalah WhatsApp Bot berbasis Node.js yang dibangun menggunakan library B
 - 🤖 Auto response message
 - 📦 Struktur OOP (Object-Oriented Programming)
 - 🔌 Mudah integrasi API (Midtrans, dll)
-- Database JSON & MongoDB
+- 📦 Database JSON & MongoDB
 - 🧠 Cooldown & command management
 - 📨 Support berbagai jenis message (text, button, dll)
 - 🔄 Scalable & mudah dikembangkan
