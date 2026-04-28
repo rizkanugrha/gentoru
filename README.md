@@ -35,8 +35,8 @@ gentoru/
 ├── cmd/
 │   ├── _response/
 ├── handler/
-│   ├── message.js
-│   └── command.js
+│   ├── group-participants.js
+│   └── message.js
 ├── lib/
 │   ├── utils/
 │   └── helper/
