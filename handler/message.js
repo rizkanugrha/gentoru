@@ -163,7 +163,7 @@ export async function Messages(client, m, commandHandler, responseHandler) {
             )
 
             await client.sendMessage(
-                "6285314240519@s.whatsapp.net",
+                config.bot.owner+ "@s.whatsapp.net",
                 { text: `Error fitur ${command}\n\n${util.format(e)}` }
             )
 
